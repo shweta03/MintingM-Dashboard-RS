@@ -71,7 +71,7 @@ creds_dict = json.loads(credentials_json)
 gc = gspread.service_account_from_dict(creds_dict)
 
 # ---> CHANGE THIS TO YOUR EXACT GOOGLE SHEET NAME <---
-sheet = gc.open("Your Google Sheet Name Here").sheet1
+sheet = gc.open("MintingMRS").sheet1
 
 # Format the data and push it
 data_to_upload = [final_df.columns.values.tolist()] + final_df.values.tolist()
