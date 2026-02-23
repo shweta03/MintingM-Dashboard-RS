@@ -1,1 +1,30 @@
+name: Morning YFinance Batch
 
+on:
+  schedule:
+    # Runs at 2:30 AM UTC (Which is exactly 8:00 AM IST) Monday through Friday
+    - cron: '30 2 * * 1-5'
+  
+  # This button allows you to test it manually whenever you want!
+  workflow_dispatch: 
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Libraries
+        run: pip install -r requirements.txt
+
+      - name: Run the Python Math
+        env:
+          GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
+        run: python morning_batch.py
