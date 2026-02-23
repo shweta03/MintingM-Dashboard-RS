@@ -27,4 +27,4 @@ jobs:
       - name: Run the Python Math
         env:
           GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
-        run: python morning_batch.py
+        run: python 750stocks.py
