@@ -38,7 +38,7 @@ def run_live_update():
 
         # MATCHING YOUR EXACT REQUESTED STRUCTURE
         row_data = {
-            "Stock Name": symbol,
+            "Stock": symbol,
             "CMP": float(live_price),
             "MintingM Score": float(stock.get("MintingM Score", 0)),
             "1 Day Return (%)": float(stock.get("1 Day Return (%)", 0)),
