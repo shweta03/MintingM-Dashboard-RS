@@ -48,7 +48,7 @@ def run_live_update():
             "6M Return (%)": float(stock.get("6M Return (%)", 0)),
             "9M Return (%)": float(stock.get("9M Return (%)", 0)),
             "12M Return (%)": float(stock.get("12M Return (%)", 0)),
-            "Last Updated": current_time  # CORRECTED: Capital 'U'
+            "Last updated": current_time  # CORRECTED: Capital 'U'
         }
         power_bi_payload.append(row_data)
 
