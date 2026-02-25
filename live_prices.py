@@ -16,7 +16,7 @@ def run_live_update():
         gc = gspread.service_account_from_dict(creds_dict)
         
         # Ensure this matches your actual Google Sheet name
-        sheet = gc.open("Your Google Sheet Name Here").sheet1
+        sheet = gc.open("MintingMRS").sheet1
         top_20_stocks = sheet.get_all_records()
     except Exception as e:
         print(f"Error: {e}")
