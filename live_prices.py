@@ -7,7 +7,7 @@ from datetime import datetime
 
 # --- CONFIGURATION ---
 # Your NEW "No-History" Push URL
-POWER_BI_URL = "https://api.powerbi.com/beta/d1f14348-f1b5-4a09-ac99-7ebf213cbc81/datasets/2a10031d-a657-4cc2-8a59-638d95cac463/rows?experience=power-bi&key=lksT8CsOgIUQuwFFWgP7hF%2BJSB2VJAqxwZx%2BK3vAzsFfO5UxDE%2F5%2BULgNzntjz8UviOLiNEL8wUfGdjr1nBUuw%3D%3D"
+POWER_BI_URL = "https://api.powerbi.com/beta/d1f14348-f1b5-4a09-ac99-7ebf213cbc81/datasets/0d54541a-b718-438f-aa5c-e4b90b669a7c/rows?experience=power-bi&key=kFsT0xTrfhFp%2Fyfel3cGaM0x%2FIvauc8FkEkyRNxhiyPSRyNmf2Q7uXUyoR0kt1%2FC7qBQ9x1hIhLA%2FRrWB4HR4w%3D%3D"
 
 def run_live_update():
     try:
