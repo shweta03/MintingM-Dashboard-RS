@@ -1,27 +1,29 @@
-name: MintingM 5-Minute Live Update
+name: Morning YFinance Batch
 
 on:
   schedule:
-    # Runs every 5 minutes from 9:15 AM to 3:30 PM IST, Monday to Friday
-    - cron: '*/5 4-10 * * 1-5'
-  workflow_dispatch: # Allows you to trigger it manually anytime
+    # Runs at 2:30 AM UTC (Which is exactly 8:00 AM IST) Monday through Friday
+    - cron: '30 2 * * 1-5'
+  
+  workflow_dispatch: 
 
 jobs:
-  run-live-feed:
+  build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Checkout the code
+        uses: actions/checkout@v3
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies
-        run: pip install requests gspread yfinance
+      - name: Install Libraries
+        run: pip install -r requirements.txt
 
-      - name: Run Script
+      - name: Run the Python Math
         env:
           GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
-        run: python live_prices.py
+        run: python morning_batch.py
