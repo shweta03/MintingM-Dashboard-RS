@@ -1,27 +1,29 @@
-name: MintingM 5-Minute Live Update
+name: Live Power BI Sync
 
 on:
   schedule:
-    # Runs every 5 minutes from 9:15 AM to 3:30 PM IST, Monday to Friday
-    - cron: '*/5 4-10 * * 1-5'
-  workflow_dispatch: # Allows you to trigger it manually anytime
+    # 03:30 to 09:00 UTC = 09:00 to 14:30 IST (Every 5 mins)
+    - cron: '*/5 3-8 * * 1-5'
+    # 09:00 to 10:00 UTC = 14:30 to 15:30 IST (Every 5 mins)
+    - cron: '0,5,10,15,20,25,30 9 * * 1-5'
+  workflow_dispatch:
 
 jobs:
-  run-live-feed:
+  live-update:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
       - name: Install Dependencies
-        run: pip install requests gspread yfinance
+        run: pip install yfinance pandas gspread requests
 
-      - name: Run Script
+      - name: Run Live Update
         env:
           GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
         run: python live_prices.py
