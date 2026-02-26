@@ -5,53 +5,53 @@ import json
 import os
 from datetime import datetime, timedelta
 
-print("Starting Morning Data Fetch for Nifty 750...")
-
+# --- 1. SETUP ---
 try:
     df_tickers = pd.read_csv("ind_nifty750list.csv")
     tickers = [str(symbol).strip() + ".NS" for symbol in df_tickers['Symbol'].tolist()]
 except Exception as e:
-    raise SystemExit(f"CRITICAL ERROR: Could not find ind_nifty750list.csv! Error details: {e}")
+    raise SystemExit(f"CRITICAL ERROR: {e}")
 
-end_date = datetime.today()
-start_date = end_date - timedelta(days=540)
-
-print("Downloading stock data... This will take 1-2 minutes...")
-data = yf.download(tickers, start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'), group_by='ticker')
+is_friday = datetime.today().weekday() == 4
+# We download 540 days of data to ensure we have enough for 12M returns and SMA 200
+data = yf.download(tickers, start=(datetime.today() - timedelta(days=540)).strftime('%Y-%m-%d'), group_by='ticker')
 
 results = []
 
 for ticker in tickers:
     try:
         df_close = data[ticker]['Close'].dropna()
-        
-        if len(df_close) < 252:
-            continue
+        if len(df_close) < 252: continue
             
         current_price = float(df_close.iloc[-1])
         sma_200 = float(df_close.iloc[-200:].mean())
         
-        price_1d = float(df_close.iloc[-2])
-        price_1w = float(df_close.iloc[-6])
-        price_1m = float(df_close.iloc[-21])
-        price_3m = float(df_close.iloc[-63])
-        price_6m = float(df_close.iloc[-126])
-        price_9m = float(df_close.iloc[-189])
-        price_12m = float(df_close.iloc[-252])
+        # --- DAILY RETURNS CALCULATION ---
+        # These will be updated every morning (Mon-Fri)
+        ret_1d = ((current_price / float(df_close.iloc[-2])) - 1) * 100
+        ret_1w = ((current_price / float(df_close.iloc[-6])) - 1) * 100
+        ret_1m = ((current_price / float(df_close.iloc[-21])) - 1) * 100
+        ret_3m = ((current_price / float(df_close.iloc[-63])) - 1) * 100
+        ret_6m = ((current_price / float(df_close.iloc[-126])) - 1) * 100
+        ret_9m = ((current_price / float(df_close.iloc[-189])) - 1) * 100
+        ret_12m = ((current_price / float(df_close.iloc[-252])) - 1) * 100
         
-        ret_1d = ((current_price / price_1d) - 1) * 100
-        ret_1w = ((current_price / price_1w) - 1) * 100
-        ret_1m = ((current_price / price_1m) - 1) * 100
-        ret_3m = ((current_price / price_3m) - 1) * 100
-        ret_6m = ((current_price / price_6m) - 1) * 100
-        ret_9m = ((current_price / price_9m) - 1) * 100
-        ret_12m = ((current_price / price_12m) - 1) * 100
-        
-        # Internal Math (Kept hidden from final sheet)
+        # RS Formula: 40%(3M) + 20%(6M) + 20%(9M) + 20%(12M)
         rs_raw = (ret_3m * 0.40) + (ret_6m * 0.20) + (ret_9m * 0.20) + (ret_12m * 0.20)
         sma_dist = ((current_price / sma_200) - 1) * 100
-        
-        # Append the raw data
+
+        # --- WEEKLY FINANCIALS (FRIDAY ONLY) ---
+        financial_data = {"Qtr Profit Var %": 0, "QoQ profits %": 0, "QoQ sales %": 0, "OPM": 0}
+        if is_friday:
+            try:
+                stock_obj = yf.Ticker(ticker)
+                q_fin = stock_obj.quarterly_financials
+                if not q_fin.empty:
+                    financial_data["OPM"] = round((q_fin.loc['Operating Income'].iloc[0] / q_fin.loc['Total Revenue'].iloc[0]) * 100, 2)
+                    financial_data["QoQ profits %"] = round(((q_fin.loc['Net Income'].iloc[0] / q_fin.loc['Net Income'].iloc[1]) - 1) * 100, 2)
+                    financial_data["QoQ sales %"] = round(((q_fin.loc['Total Revenue'].iloc[0] / q_fin.loc['Total Revenue'].iloc[1]) - 1) * 100, 2)
+            except: pass
+
         results.append({
             "Stock Name": ticker.replace('.NS', ''),
             "CMP": round(current_price, 2),
@@ -64,56 +64,37 @@ for ticker in tickers:
             "9M Return (%)": round(ret_9m, 2),
             "12M Return (%)": round(ret_12m, 2),
             "RS_Raw": rs_raw,
-            "SMA_Dist": sma_dist
+            "SMA_Dist": sma_dist,
+            **financial_data
         })
-    except Exception as e:
-        pass
+    except: pass
 
-# 3. Save to DataFrame
+# --- 2. RANKING & DATA PRESERVATION ---
 final_df = pd.DataFrame(results)
-
-# --- CALCULATE THE RANKS & MINTINGM SCORE ---
 final_df['RS (1-100)'] = (final_df['RS_Raw'].rank(pct=True) * 100).round(2)
-final_df['SMA_Rank'] = final_df['SMA_Dist'].rank(pct=True) * 100
+final_df['SMA_Rank'] = (final_df['SMA_Dist'].rank(pct=True) * 100).round(2)
 final_df['MintingM Score'] = ((final_df['RS (1-100)'] + final_df['SMA_Rank']) / 2).round(2)
+final_df = final_df.sort_values(by="MintingM Score", ascending=False).head(20)
 
-# Sort strictly by the combined MintingM Score
-final_df = final_df.sort_values(by="MintingM Score", ascending=False)
-
-# Keep exactly 20 rows
-final_df = final_df.head(20)
-
-# --- FORCE THE EXACT COLUMN ORDER ---
-# This is where your exact requested layout is locked in!
-columns_to_keep = [
-    "Stock Name", 
-    "CMP", 
-    "RS (1-100)", 
-    "MintingM Score", 
-    "SMA 200", 
-    "1 Day Return (%)", 
-    "1 Week Return (%)", 
-    "1 Month Return (%)", 
-    "3M Return (%)", 
-    "6M Return (%)", 
-    "9M Return (%)", 
-    "12M Return (%)"
-]
-final_sheet_df = final_df[columns_to_keep]
-
-print("Successfully formatted the dashboard with exact column ordering!")
-
-# 4. Connect to Google Sheets and Push
-credentials_json = os.environ.get("GOOGLE_SHEETS_CREDENTIALS")
-creds_dict = json.loads(credentials_json)
-gc = gspread.service_account_from_dict(creds_dict)
-
-# ---> CHANGE THIS TO YOUR EXACT GOOGLE SHEET NAME <---
+# Connect to Google Sheets
+gc = gspread.service_account_from_dict(json.loads(os.environ.get("GOOGLE_SHEETS_CREDENTIALS")))
 sheet = gc.open("MintingMRS").sheet1
 
-# Push data to sheet
-data_to_upload = [final_sheet_df.columns.values.tolist()] + final_sheet_df.values.tolist()
+# Mon-Thu: Preserve the OPM/QoQ columns from the previous Friday's run
+if not is_friday:
+    try:
+        existing = pd.DataFrame(sheet.get_all_records())
+        if not existing.empty:
+            for col in ["Qtr Profit Var %", "QoQ profits %", "QoQ sales %", "OPM"]:
+                final_df[col] = final_df['Stock Name'].map(existing.set_index('Stock Name')[col]).fillna(0)
+    except: pass
+
+# --- 3. FINAL UPLOAD (EXACT COLUMN ORDER) ---
+cols = ["Stock Name", "CMP", "MintingM Score", "RS (1-100)", "SMA 200", 
+        "1 Day Return (%)", "1 Week Return (%)", "1 Month Return (%)", 
+        "3M Return (%)", "6M Return (%)", "9M Return (%)", "12M Return (%)",
+        "Qtr Profit Var %", "QoQ profits %", "QoQ sales %", "OPM"]
+
+data_to_upload = [final_df[cols].columns.values.tolist()] + final_df[cols].values.tolist()
 sheet.clear()
 sheet.update(values=data_to_upload, range_name="A1")
-
-print("SUCCESS! Pushed perfectly formatted columns to Google Sheets.")
