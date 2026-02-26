@@ -6,7 +6,7 @@ import yfinance as yf
 from datetime import datetime
 
 # --- CONFIGURATION ---
-POWER_BI_URL = "https://api.powerbi.com/beta/d1f14348-f1b5-4a09-ac99-7ebf213cbc81/datasets/4fb24510-2bf7-4d8a-95a7-9b2ff139a217/rows?experience=power-bi&key=s1ZY%2FrevbSplGQmqM5Cit18Er9lYpdVrQJzk0kYXuiLwQn4RBL4KNs%2FqnSFrnnqAOy2uvAfMChiBwyu6DO8i%2FQ%3D%3D"
+POWER_BI_URL = "https://api.powerbi.com/beta/d1f14348-f1b5-4a09-ac99-7ebf213cbc81/datasets/d3c4173f-45de-4bd4-b102-0ef01c1b5399/rows?experience=power-bi&key=qlXOXHLxy4RLVn7v1m%2Fc83iBxV6yyVHyk1kNUlbbi8NrMw3rYXIJUhR4vD%2FkQMOO0VDr9TtPhj8Ete7ZWBUCEA%3D%3D"
 def run_live_update():
     try:
         credentials_json = os.environ.get("GOOGLE_SHEETS_CREDENTIALS")
