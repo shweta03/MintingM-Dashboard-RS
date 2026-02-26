@@ -2,7 +2,7 @@ name: Morning YFinance Batch
 
 on:
   schedule:
-    # Runs at 2:30 AM UTC (Which is exactly 8:00 AM IST) Monday through Friday
+    # Runs at 2:30 AM UTC (8:00 AM IST) Monday through Friday
     - cron: '30 2 * * 1-5'
   
   workflow_dispatch: 
@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Added to prevent Friday's heavy financial fetch from timing out
+    timeout-minutes: 30 
 
     steps:
       - name: Checkout the code
@@ -26,4 +28,5 @@ jobs:
       - name: Run the Python Math
         env:
           GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
+        # Ensure your script filename is exactly morning_batch.py
         run: python morning_batch.py
