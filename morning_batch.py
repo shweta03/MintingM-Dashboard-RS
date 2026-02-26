@@ -12,7 +12,7 @@ try:
 except Exception as e:
     raise SystemExit(f"CRITICAL ERROR: {e}")
 
-is_friday = datetime.today().weekday() == 4
+is_friday = True # Temporary: Forces the script to fetch QoQ/OPM data today
 # We download 540 days of data to ensure we have enough for 12M returns and SMA 200
 data = yf.download(tickers, start=(datetime.today() - timedelta(days=540)).strftime('%Y-%m-%d'), group_by='ticker')
 
