@@ -1,32 +1,27 @@
-name: Morning YFinance Batch
-
+name: Morning Master Selection
 on:
   schedule:
-    # Runs at 2:30 AM UTC (8:00 AM IST) Monday through Friday
-    - cron: '30 2 * * 1-5'
-  
-  workflow_dispatch: 
-
+    - cron: '45 3 * * 1-5' # Runs at 03:45 UTC -> 9:15 AM IST (Mon-Fri)
+  workflow_dispatch:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Added to prevent Friday's heavy financial fetch from timing out
-    timeout-minutes: 30 
-
+    permissions:
+      contents: write
     steps:
-      - name: Checkout the code
-        uses: actions/checkout@v3
-
-      - name: Setup Python
+      - uses: actions/checkout@v3
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-
-      - name: Install Libraries
+      - name: Install dependencies
         run: pip install -r requirements.txt
-
-      - name: Run the Python Math
-        env:
-          GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
-        # Ensure your script filename is exactly morning_batch.py
-        run: python morning_batch.py
+      - name: Run Morning Master
+        run: python morning_master.py
+      - name: Commit and Push
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add live_cmp.csv
+          git commit -m "Morning Top 20 Selection" || echo "No changes to commit"
+          git push
