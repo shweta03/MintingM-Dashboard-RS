@@ -1,0 +1,27 @@
+name: Friday Fundamentals Update
+on:
+  schedule:
+    - cron: '50 3 * * 5' # Runs at 03:50 UTC -> 9:20 AM IST (FRIDAYS ONLY)
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run Friday Fundamentals
+        run: python friday_fundamentals.py
+      - name: Commit and Push
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add live_cmp.csv
+          git commit -m "Friday Quarterly Update" || echo "No changes to commit"
+          git push
