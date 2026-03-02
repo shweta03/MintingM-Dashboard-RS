@@ -1,3 +1,4 @@
 pandas
+numpy
 yfinance
-gspread
+pandas-ta
