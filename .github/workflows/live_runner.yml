@@ -1,29 +1,34 @@
-name: Live Power BI Sync
-
+name: Live CMP Pinger
 on:
   schedule:
-    # 03:30 to 09:00 UTC = 09:00 to 14:30 IST (Every 5 mins)
-    - cron: '*/5 3-8 * * 1-5'
-    # 09:00 to 10:00 UTC = 14:30 to 15:30 IST (Every 5 mins)
-    - cron: '0,5,10,15,20,25,30 9 * * 1-5'
+    - cron: '0 4 * * 1-5'   # 9:30 AM IST
+    - cron: '45 4 * * 1-5'  # 10:15 AM IST
+    - cron: '30 5 * * 1-5'  # 11:00 AM IST
+    - cron: '15 6 * * 1-5'  # 11:45 AM IST
+    - cron: '0 7 * * 1-5'   # 12:30 PM IST
+    - cron: '45 7 * * 1-5'  # 1:15 PM IST
+    - cron: '30 8 * * 1-5'  # 2:00 PM IST
+    - cron: '15 9 * * 1-5'  # 2:45 PM IST
   workflow_dispatch:
-
 jobs:
-  live-update:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
-
+      - uses: actions/checkout@v3
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-
-      - name: Install Dependencies
-        run: pip install yfinance pandas gspread requests
-
-      - name: Run Live Update
-        env:
-          GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
-        run: python live_prices.py
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run Live Pinger
+        run: python live_pinger.py
+      - name: Commit and Push
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add live_cmp.csv
+          git commit -m "Live CMP Update" || echo "No changes to commit"
+          git push
