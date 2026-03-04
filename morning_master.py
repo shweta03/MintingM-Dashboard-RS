@@ -6,10 +6,9 @@ from datetime import datetime, timedelta
 import math
 import os
 
-print("Starting Morning Master (750 Universe Scan) with Weighted Sharpe...")
+print("Starting Morning Master (750 Universe Scan) with Realistic Sharpe...")
 
 # 1. Load Universe
-# Ensure 'ind_nifty750list.csv' is in your GitHub repo
 try:
     df_tickers = pd.read_csv("ind_nifty750list.csv")
     tickers = [str(symbol).strip() + ".NS" for symbol in df_tickers['Symbol'].tolist()]
@@ -28,7 +27,7 @@ for ticker in tickers:
     try:
         # Basic data cleaning
         df = data[ticker].dropna(subset=['High', 'Low', 'Close']).copy()
-        if len(df) < 200: 
+        if len(df) < 252: # Increased to 252 for stable Sharpe
             continue
             
         # --- TA Indicators ---
@@ -61,8 +60,8 @@ for ticker in tickers:
         ret_1d, ret_1w, ret_1m = get_ret(2), get_ret(6), get_ret(21)
         ret_3m, ret_6m, ret_9m, ret_12m = get_ret(63), get_ret(126), get_ret(189), get_ret(252)
         
-       # --- REALISTIC SHARPE CALCULATION ---
-       df['Daily_Ret'] = df['Close'].pct_change()
+        # --- REALISTIC SHARPE CALCULATION ---
+        df['Daily_Ret'] = df['Close'].pct_change()
 
         # 1. Use a 252-day window for a stable Risk baseline (Standard Deviation)
         stable_std = df['Daily_Ret'].tail(252).std() 
@@ -72,7 +71,7 @@ for ticker in tickers:
 
         # 3. Calculate Sharpe
         if stable_std > 0.005: 
-        # This formula balances recent gains against a full year of volatility
+            # This formula balances recent gains against a full year of volatility
             sharpe = ((recent_mean_ret - daily_rf_rate) / stable_std) * math.sqrt(252)
         else:
             sharpe = 0
@@ -110,8 +109,7 @@ for ticker in tickers:
             "Sharpe": round(sharpe, 2), 
             "Signal": signal
         })
-    except Exception as e:
-        # This prevents the script from stopping if one ticker fails
+    except Exception:
         continue
 
 # 2. Process Results and Ranking
@@ -121,7 +119,6 @@ if not results:
 
 df_final = pd.DataFrame(results)
 
-# Safety check: Ensure columns exist before ranking
 if 'RS_Raw' in df_final.columns and 'SMA_Dist' in df_final.columns:
     df_final['RS (1-100)'] = (df_final['RS_Raw'].rank(pct=True) * 100).round(2)
     df_final['SMA_Rank'] = (df_final['SMA_Dist'].rank(pct=True) * 100).round(2)
@@ -132,7 +129,7 @@ else:
     print("Ranking failed: Missing data columns.")
     exit(1)
 
-# 3. Merge Quarterly Data (Preserve existing data from live_cmp.csv)
+# 3. Merge Quarterly Data
 qtr_cols = ['Qtr Profit Var %', 'QoQ profits %', 'QoQ sales %', 'OPM']
 try:
     yesterday_df = pd.read_csv("live_cmp.csv")
@@ -147,6 +144,5 @@ final_cols = ["Stock Name", "CMP", "MintingM Score", "RS (1-100)", "SMA 200", "1
               "1 Week Return (%)", "1M Return (%)", "3M Return (%)", "6M Return (%)", 
               "9M Return (%)", "12M Return (%)", "Sharpe", "Signal"] + qtr_cols + ["Last updated"]
 
-# Final Save
 top_20[final_cols].to_csv("live_cmp.csv", index=False)
 print(f"Morning Master Complete. {len(top_20)} stocks saved to live_cmp.csv")
