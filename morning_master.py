@@ -61,18 +61,19 @@ for ticker in tickers:
         ret_1d, ret_1w, ret_1m = get_ret(2), get_ret(6), get_ret(21)
         ret_3m, ret_6m, ret_9m, ret_12m = get_ret(63), get_ret(126), get_ret(189), get_ret(252)
         
-        # --- WEIGHTED SHARPE CALCULATION ---
-        # Using Exponentially Weighted Moving Average (EWMA) for recent bias
-        df['Daily_Ret'] = df['Close'].pct_change()
-        
-        # We look at the last 252 days but weight the last 63 days (3 months) more heavily
-        span_val = 63 
-        ewm_mean = df['Daily_Ret'].tail(252).ewm(span=span_val).mean().iloc[-1]
-        ewm_std = df['Daily_Ret'].tail(252).ewm(span=span_val).std().iloc[-1]
-        
-        # Safety check for volatility (std_dev)
-        if ewm_std > 0.005: # Protect against illiquid stocks/upper circuits
-            sharpe = ((ewm_mean - daily_rf_rate) / ewm_std) * math.sqrt(252)
+       # --- REALISTIC SHARPE CALCULATION ---
+       df['Daily_Ret'] = df['Close'].pct_change()
+
+        # 1. Use a 252-day window for a stable Risk baseline (Standard Deviation)
+        stable_std = df['Daily_Ret'].tail(252).std() 
+
+        # 2. Use a 63-day window for the Return (to catch current momentum)
+        recent_mean_ret = df['Daily_Ret'].tail(63).mean()
+
+        # 3. Calculate Sharpe
+        if stable_std > 0.005: 
+        # This formula balances recent gains against a full year of volatility
+            sharpe = ((recent_mean_ret - daily_rf_rate) / stable_std) * math.sqrt(252)
         else:
             sharpe = 0
             
