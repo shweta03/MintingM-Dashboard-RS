@@ -53,12 +53,20 @@ for ticker in tickers:
         rs_raw = (ret_3m * 0.40) + (ret_6m * 0.20) + (ret_9m * 0.20) + (ret_12m * 0.20)
         sma_dist = ((current_price / sma_200) - 1) * 100
         
+        # --- NEW WEIGHTED SHARPE LOGIC ---
         daily_returns = df['Close'].pct_change().dropna()
         rolling_window = daily_returns[-252:]
-        std_dev = rolling_window.std()
         
-        if std_dev > 0 and len(rolling_window) > 0:
-            sharpe = ((rolling_window.mean() - daily_rf_rate) / std_dev) * math.sqrt(252)
+        if len(rolling_window) > 1:
+            # span=252 means it looks at the whole year, but decays the weight 
+            # so the most recent weeks impact the score heavily.
+            ewm_mean = rolling_window.ewm(span=252, adjust=False).mean().iloc[-1]
+            ewm_std = rolling_window.ewm(span=252, adjust=False).std().iloc[-1]
+            
+            if ewm_std > 0:
+                sharpe = ((ewm_mean - daily_rf_rate) / ewm_std) * math.sqrt(252)
+            else:
+                sharpe = 0
         else:
             sharpe = 0
         # --- SIGNAL LOGIC ---
