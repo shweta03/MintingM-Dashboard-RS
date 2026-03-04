@@ -53,11 +53,14 @@ for ticker in tickers:
         rs_raw = (ret_3m * 0.40) + (ret_6m * 0.20) + (ret_9m * 0.20) + (ret_12m * 0.20)
         sma_dist = ((current_price / sma_200) - 1) * 100
         
-        shifted_returns = df['Close'].pct_change().shift(1).dropna()
-        rolling_window = shifted_returns[-252:]
+        daily_returns = df['Close'].pct_change().dropna()
+        rolling_window = daily_returns[-252:]
         std_dev = rolling_window.std()
-        sharpe = ((rolling_window.mean() - daily_rf_rate) / std_dev) * math.sqrt(252) if std_dev != 0 else 0
-
+        
+        if std_dev > 0 and len(rolling_window) > 0:
+            sharpe = ((rolling_window.mean() - daily_rf_rate) / std_dev) * math.sqrt(252)
+        else:
+            sharpe = 0
         # --- SIGNAL LOGIC ---
         sell_triggered = (current_price < sma_200) or (current_price < supertrend_val)
         buy_triggered = (
