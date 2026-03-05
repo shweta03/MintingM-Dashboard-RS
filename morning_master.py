@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import math
 import os
 
-print("Starting Morning Master (750 Universe Scan) with Realistic Sharpe...")
+print("Starting Morning Master (750 Universe Scan) with Logic Verification...")
 
 # 1. Load Universe
 try:
@@ -16,7 +16,7 @@ except FileNotFoundError:
     print("Error: ind_nifty750list.csv not found!")
     exit(1)
 
-# Download 1.5 years of data (for 252 days + 200 SMA buffer)
+# Download data
 start_date = datetime.today() - timedelta(days=400)
 data = yf.download(tickers, start=start_date.strftime('%Y-%m-%d'), group_by='ticker', threads=True)
 
@@ -25,18 +25,18 @@ results = []
 
 for ticker in tickers:
     try:
-        # Basic data cleaning
         df = data[ticker].dropna(subset=['High', 'Low', 'Close']).copy()
-        if len(df) < 252: # Increased to 252 for stable Sharpe
+        if len(df) < 252:
             continue
             
-        # --- TA Indicators ---
+        # --- Indicators ---
         df['SMA_50'] = ta.sma(df['Close'], length=50)
         df['SMA_200'] = ta.sma(df['Close'], length=200)
         df['EMA_9'] = ta.ema(df['Close'], length=9)
         df['RSI_14'] = ta.rsi(df['Close'], length=14)
         
         try:
+            # SuperTrend (15, 2.75)
             st = ta.supertrend(df['High'], df['Low'], df['Close'], length=15, multiplier=2.75)
             st_col = [c for c in st.columns if c.startswith('SUPERT_')][0]
             df['SuperTrend'] = st[st_col]
@@ -62,35 +62,22 @@ for ticker in tickers:
         ret_1d, ret_1w, ret_1m = get_ret(2), get_ret(6), get_ret(21)
         ret_3m, ret_6m, ret_9m, ret_12m = get_ret(63), get_ret(126), get_ret(189), get_ret(252)
         
-        # --- WEIGHTED MOMENTUM SHARPE (NOT ANNUALIZED) ---
+        # --- Weighted Sharpe ---
         df['Daily_Ret'] = df['Close'].pct_change()
-
-        # 1. Use EWMA for the mean return (last 63 days bias)
         weighted_mean = df['Daily_Ret'].tail(63).ewm(span=63).mean().iloc[-1]
-
-        # 2. Use a stable 252-day Standard Deviation for Risk
         stable_std = df['Daily_Ret'].tail(252).std()
-
-        # 3. Calculate Weighted Sharpe
-        if stable_std > 0.005:
-            sharpe = ((weighted_mean - daily_rf_rate) / stable_std) * 10
-        else:
-            sharpe = 0
+        sharpe = ((weighted_mean - daily_rf_rate) / stable_std) * 10 if stable_std > 0.005 else 0
             
-        # RS and SMA Distance
         rs_raw = (ret_3m * 0.40) + (ret_6m * 0.20) + (ret_9m * 0.20) + (ret_12m * 0.20)
         sma_dist = ((current_price / sma_200) - 1) * 100
         
-        # --- SIGNAL LOGIC ---
-        
-        # Circuit Day Filter (High == Low)
+        # --- YOUR SIGNAL LOGIC ---
         is_circuit_day = (high_now == low_now)
-
-        # Sell Logic: Close < 200 SMA OR Close < SuperTrend (15, 2.75)
+        
+        # Sell Logic: Price < 200 SMA OR Price < SuperTrend
         sell_triggered = (current_price < sma_200) or (current_price < supertrend_val)
         
-        # Buy Logic: RSI > 55, 1D Return > -5%, Momentum Windows, SMA 50 > 200, RS > 80,
-        # Price > 200 SMA, Price > SuperTrend, and Price within 5% of EMA 9
+        # Buy Logic
         buy_triggered = (
             not is_circuit_day and
             (rsi_14 > 55) and 
@@ -112,6 +99,14 @@ for ticker in tickers:
         else:
             signal = "HOLD"
 
+        # DEBUG PRINT FOR MCX
+        if "MCX" in ticker:
+            print(f"\n--- MCX DEBUG DATA ---")
+            print(f"Price: {current_price}, SMA200: {sma_200}, SuperTrend: {supertrend_val}")
+            print(f"Condition Check: Price < SMA200 is {current_price < sma_200}")
+            print(f"Condition Check: Price < SuperTrend is {current_price < supertrend_val}")
+            print(f"Final Signal: {signal}\n")
+
         results.append({
             "Stock Name": ticker.replace('.NS', ''), 
             "CMP": round(current_price, 2), 
@@ -131,44 +126,15 @@ for ticker in tickers:
     except Exception:
         continue
 
-# 2. Process Results and Ranking
-if not results:
-    print("No data collected. Check internet or ticker list.")
-    exit(1)
-
+# 2. Process Ranking
 df_final = pd.DataFrame(results)
+df_final['RS (1-100)'] = (df_final['RS_Raw'].rank(pct=True) * 100).round(2)
+df_final['SMA_Rank'] = (df_final['SMA_Dist'].rank(pct=True) * 100).round(2)
+df_final['MintingM Score'] = ((df_final['RS (1-100)'] + df_final['SMA_Rank']) / 2).round(2)
 
-if 'RS_Raw' in df_final.columns and 'SMA_Dist' in df_final.columns:
-    df_final['RS (1-100)'] = (df_final['RS_Raw'].rank(pct=True) * 100).round(2)
-    df_final['SMA_Rank'] = (df_final['SMA_Dist'].rank(pct=True) * 100).round(2)
-    df_final['MintingM Score'] = ((df_final['RS (1-100)'] + df_final['SMA_Rank']) / 2).round(2)
-    
-    # Sort by RS_Raw Descending to align with top 6 selection logic
-    top_20 = df_final.sort_values(by="RS_Raw", ascending=False).head(20).copy()
-else:
-    print("Ranking failed: Missing data columns.")
-    exit(1)
+top_20 = df_final.sort_values(by="RS_Raw", ascending=False).head(20).copy()
 
-# 3. Merge Quarterly Data
-qtr_cols = ['Qtr Profit Var %', 'QoQ profits %', 'QoQ sales %', 'OPM']
-try:
-    yesterday_df = pd.read_csv("live_cmp.csv")
-    top_20 = pd.merge(top_20, yesterday_df[['Stock Name'] + qtr_cols], on='Stock Name', how='left')
-    top_20[qtr_cols] = top_20[qtr_cols].fillna(0)
-except Exception:
-    for col in qtr_cols: 
-        top_20[col] = 0
-
+# 3. Final CSV Saving
 top_20['Last updated'] = datetime.now().strftime("%Y-%m-%d %H:%M")
-final_cols = ["Stock Name", "CMP", "MintingM Score", "RS (1-100)", "SMA 200", "1 Day Return (%)", 
-              "1 Week Return (%)", "1M Return (%)", "3M Return (%)", "6M Return (%)", 
-              "9M Return (%)", "12M Return (%)", "Sharpe", "Signal"] + qtr_cols + ["Last updated"]
-
-top_20[final_cols].to_csv("live_cmp.csv", index=False)
-print(f"Morning Master Complete. {len(top_20)} stocks saved to live_cmp.csv")
-
-# Final console summary for your Top 6 RS positions
-buys = df_final[df_final['Signal'] == "BUY"].sort_values(by="RS_Raw", ascending=False).head(6)
-if not buys.empty:
-    print("\n--- TOP 6 BUY CANDIDATES (BY RS) ---")
-    print(buys[["Stock Name", "CMP", "RS_Raw", "Signal"]])
+top_20.to_csv("live_cmp.csv", index=False)
+print(f"Scan Complete. Data saved to live_cmp.csv")
