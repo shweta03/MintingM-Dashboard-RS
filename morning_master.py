@@ -71,41 +71,35 @@ for ticker in tickers:
         rs_raw = (ret_3m * 0.40) + (ret_6m * 0.20) + (ret_9m * 0.20) + (ret_12m * 0.20)
         sma_dist = ((current_price / sma_200) - 1) * 100
         
-        # --- YOUR SIGNAL LOGIC ---
-        is_circuit_day = (high_now == low_now)
-        
-        # Sell Logic: Price < 200 SMA OR Price < SuperTrend
-        sell_triggered = (current_price < sma_200) or (current_price < supertrend_val)
-        
-        # Buy Logic
-        buy_triggered = (
-            not is_circuit_day and
-            (rsi_14 > 55) and 
-            (ret_1d > -5.0) and 
-            ((ret_3m > 20.0) or (ret_6m > 30.0) or (ret_1m > 10.0)) and
-            (sma_50 > sma_200) and 
-            (rs_raw > 80) and 
-            (current_price > sma_200) and 
-            (current_price > supertrend_val) and
-            (abs((current_price / ema_9) - 1) <= 0.05)
-        )
+        # --- YOUR EXACT SIGNAL LOGIC ---
 
-        if is_circuit_day:
-            signal = "HOLD (CIRCUIT)"
-        elif sell_triggered:
-            signal = "SELL"
-        elif buy_triggered:
-            signal = "BUY"
-        else:
-            signal = "HOLD"
+# 1. Define Boolean Flags
+price_above_sma200 = (current_price > sma_200)
+price_above_supertrend = (current_price > supertrend_val)
 
-        # DEBUG PRINT FOR MCX
-        if "MCX" in ticker:
-            print(f"\n--- MCX DEBUG DATA ---")
-            print(f"Price: {current_price}, SMA200: {sma_200}, SuperTrend: {supertrend_val}")
-            print(f"Condition Check: Price < SMA200 is {current_price < sma_200}")
-            print(f"Condition Check: Price < SuperTrend is {current_price < supertrend_val}")
-            print(f"Final Signal: {signal}\n")
+# 2. Sell Logic (Priority 1)
+# Triggers if price is below either trend indicator
+sell_triggered = (not price_above_sma200) or (not price_above_supertrend)
+
+# 3. Buy Logic (Priority 2)
+buy_triggered = (
+    (rsi_14 > 55) and 
+    (ret_1d > -5.0) and 
+    ((ret_3m > 20.0) or (ret_6m > 30.0) or (ret_1m > 10.0)) and
+    (sma_50 > sma_200) and 
+    (rs_raw > 80) and 
+    price_above_sma200 and 
+    price_above_supertrend and
+    (abs((current_price / ema_9) - 1) <= 0.05)
+)
+
+# 4. Final Assignment
+if sell_triggered:
+    signal = "SELL"
+elif buy_triggered:
+    signal = "BUY"
+else:
+    signal = "HOLD"
 
         results.append({
             "Stock Name": ticker.replace('.NS', ''), 
