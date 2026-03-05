@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import math
 import os
 
-print("Starting Morning Master (750 Universe Scan) with Logic Verification...")
+print("Starting Morning Master (750 Universe Scan) with Exact Priority Logic...")
 
 # 1. Load Universe
 try:
@@ -16,7 +16,7 @@ except FileNotFoundError:
     print("Error: ind_nifty750list.csv not found!")
     exit(1)
 
-# Download data
+# Download 1.5 years of data
 start_date = datetime.today() - timedelta(days=400)
 data = yf.download(tickers, start=start_date.strftime('%Y-%m-%d'), group_by='ticker', threads=True)
 
@@ -25,11 +25,12 @@ results = []
 
 for ticker in tickers:
     try:
+        # Basic data cleaning
         df = data[ticker].dropna(subset=['High', 'Low', 'Close']).copy()
         if len(df) < 252:
             continue
             
-        # --- Indicators ---
+        # --- TA Indicators ---
         df['SMA_50'] = ta.sma(df['Close'], length=50)
         df['SMA_200'] = ta.sma(df['Close'], length=200)
         df['EMA_9'] = ta.ema(df['Close'], length=9)
@@ -68,38 +69,41 @@ for ticker in tickers:
         stable_std = df['Daily_Ret'].tail(252).std()
         sharpe = ((weighted_mean - daily_rf_rate) / stable_std) * 10 if stable_std > 0.005 else 0
             
+        # RS and SMA Distance
         rs_raw = (ret_3m * 0.40) + (ret_6m * 0.20) + (ret_9m * 0.20) + (ret_12m * 0.20)
         sma_dist = ((current_price / sma_200) - 1) * 100
         
-        # --- YOUR EXACT SIGNAL LOGIC ---
+        # --- YOUR EXACT SIGNAL LOGIC ADJUSTED ---
+        
+        # 1. Define Boolean Flags
+        price_above_sma200 = (current_price > sma_200)
+        price_above_supertrend = (current_price > supertrend_val)
+        is_circuit_day = (high_now == low_now)
 
-# 1. Define Boolean Flags
-price_above_sma200 = (current_price > sma_200)
-price_above_supertrend = (current_price > supertrend_val)
+        # 2. Sell Logic (Priority 1)
+        # Triggers if price is below either trend indicator
+        sell_triggered = (not price_above_sma200) or (not price_above_supertrend)
 
-# 2. Sell Logic (Priority 1)
-# Triggers if price is below either trend indicator
-sell_triggered = (not price_above_sma200) or (not price_above_supertrend)
+        # 3. Buy Logic (Priority 2)
+        buy_triggered = (
+            not is_circuit_day and
+            (rsi_14 > 55) and 
+            (ret_1d > -5.0) and 
+            ((ret_3m > 20.0) or (ret_6m > 30.0) or (ret_1m > 10.0)) and
+            (sma_50 > sma_200) and 
+            (rs_raw > 80) and 
+            price_above_sma200 and 
+            price_above_supertrend and
+            (abs((current_price / ema_9) - 1) <= 0.05)
+        )
 
-# 3. Buy Logic (Priority 2)
-buy_triggered = (
-    (rsi_14 > 55) and 
-    (ret_1d > -5.0) and 
-    ((ret_3m > 20.0) or (ret_6m > 30.0) or (ret_1m > 10.0)) and
-    (sma_50 > sma_200) and 
-    (rs_raw > 80) and 
-    price_above_sma200 and 
-    price_above_supertrend and
-    (abs((current_price / ema_9) - 1) <= 0.05)
-)
-
-# 4. Final Assignment
-if sell_triggered:
-    signal = "SELL"
-elif buy_triggered:
-    signal = "BUY"
-else:
-    signal = "HOLD"
+        # 4. Final Assignment
+        if sell_triggered:
+            signal = "SELL"
+        elif buy_triggered:
+            signal = "BUY"
+        else:
+            signal = "HOLD"
 
         results.append({
             "Stock Name": ticker.replace('.NS', ''), 
@@ -120,15 +124,29 @@ else:
     except Exception:
         continue
 
-# 2. Process Ranking
+# 2. Process Results and Ranking
+if not results:
+    exit(1)
+
 df_final = pd.DataFrame(results)
 df_final['RS (1-100)'] = (df_final['RS_Raw'].rank(pct=True) * 100).round(2)
 df_final['SMA_Rank'] = (df_final['SMA_Dist'].rank(pct=True) * 100).round(2)
 df_final['MintingM Score'] = ((df_final['RS (1-100)'] + df_final['SMA_Rank']) / 2).round(2)
 
+# Sort by RS_Raw Descending
 top_20 = df_final.sort_values(by="RS_Raw", ascending=False).head(20).copy()
 
-# 3. Final CSV Saving
+# 3. Merge Quarterly Data & Export
+qtr_cols = ['Qtr Profit Var %', 'QoQ profits %', 'QoQ sales %', 'OPM']
+try:
+    yesterday_df = pd.read_csv("live_cmp.csv")
+    top_20 = pd.merge(top_20, yesterday_df[['Stock Name'] + qtr_cols], on='Stock Name', how='left')
+    top_20[qtr_cols] = top_20[qtr_cols].fillna(0)
+except:
+    for col in qtr_cols: top_20[col] = 0
+
 top_20['Last updated'] = datetime.now().strftime("%Y-%m-%d %H:%M")
 top_20.to_csv("live_cmp.csv", index=False)
-print(f"Scan Complete. Data saved to live_cmp.csv")
+
+print(f"Morning Master Complete. {len(top_20)} stocks saved. Top 6 Candidates printed below:")
+print(df_final[df_final['Signal'] == "BUY"].sort_values(by="RS_Raw", ascending=False).head(6)[["Stock Name", "CMP", "RS_Raw"]])
