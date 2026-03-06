@@ -16,9 +16,9 @@ def run_market_scan():
         tickers = [str(symbol).strip() + ".NS" for symbol in df_tickers['Symbol'].tolist()]
     except FileNotFoundError:
         print("Error: ind_nifty750list.csv not found!")
-        return # Prevents the whole loop from crashing if the file is missing
+        return
 
-    # Download 1.5 years of data (for 252 days + 200 SMA buffer)
+    # Download 1.5 years of data
     start_date = datetime.today() - timedelta(days=400)
     data = yf.download(tickers, start=start_date.strftime('%Y-%m-%d'), group_by='ticker', threads=True)
 
@@ -27,7 +27,6 @@ def run_market_scan():
 
     for ticker in tickers:
         try:
-            # Basic data cleaning
             df = data[ticker].dropna(subset=['High', 'Low', 'Close']).copy()
             if len(df) < 252:
                 continue
@@ -39,7 +38,6 @@ def run_market_scan():
             df['RSI_14'] = ta.rsi(df['Close'], length=14)
             
             try:
-                # More robust SuperTrend extraction
                 st = ta.supertrend(df['High'], df['Low'], df['Close'], length=15, multiplier=2.75)
                 st_col = [c for c in st.columns if c.startswith('SUPERT_')][0]
                 df['SuperTrend'] = st[st_col]
@@ -65,7 +63,7 @@ def run_market_scan():
             ret_1d, ret_1w, ret_1m = get_ret(2), get_ret(6), get_ret(21)
             ret_3m, ret_6m, ret_9m, ret_12m = get_ret(63), get_ret(126), get_ret(189), get_ret(252)
             
-            # --- WEIGHTED MOMENTUM SHARPE (NOT ANNUALIZED) ---
+            # --- WEIGHTED MOMENTUM SHARPE ---
             df['Daily_Ret'] = df['Close'].pct_change()
             weighted_mean = df['Daily_Ret'].tail(63).ewm(span=63).mean().iloc[-1]
             stable_std = df['Daily_Ret'].tail(252).std()
@@ -75,19 +73,15 @@ def run_market_scan():
             else:
                 sharpe = 0
                 
-            # RS and SMA Distance
             rs_raw = (ret_3m * 0.40) + (ret_6m * 0.20) + (ret_9m * 0.20) + (ret_12m * 0.20)
             sma_dist = ((current_price / sma_200) - 1) * 100
             
-            # --- NEW SIGNAL LOGIC ---
+            # --- SIGNAL LOGIC ---
             is_circuit_day = (high_now == low_now)
             price_above_sma200 = (current_price > sma_200) if not pd.isna(sma_200) else False
             price_above_supertrend = (current_price > supertrend_val) if not pd.isna(supertrend_val) else True
 
-            # Priority 1: Sell Logic
             sell_triggered = (not price_above_sma200) or (not price_above_supertrend)
-            
-            # Priority 2: Buy Logic
             buy_triggered = (
                 not is_circuit_day and
                 (rsi_14 > 55) and 
@@ -100,13 +94,9 @@ def run_market_scan():
                 (abs((current_price / ema_9) - 1) <= 0.05)
             )
 
-            # Final Assignment
-            if sell_triggered:
-                signal = "SELL"
-            elif buy_triggered:
-                signal = "BUY"
-            else:
-                signal = "HOLD"
+            if sell_triggered: signal = "SELL"
+            elif buy_triggered: signal = "BUY"
+            else: signal = "HOLD"
 
             results.append({
                 "Stock Name": ticker.replace('.NS', ''), 
@@ -155,11 +145,8 @@ def run_market_scan():
             top_20[col] = 0
 
     top_20['Last updated'] = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    # --- ADD TRADINGVIEW LINK HERE ---
     top_20['TradingView Link'] = "https://in.tradingview.com/chart/?symbol=NSE:" + top_20['Stock Name'].astype(str)
 
-    # UPDATED TO INCLUDE SUPERTREND & TRADINGVIEW LINK
     final_cols = ["Stock Name", "CMP", "MintingM Score", "RS (1-100)", "SMA 200", "SuperTrend", "1 Day Return (%)", 
                   "1 Week Return (%)", "1M Return (%)", "3M Return (%)", "6M Return (%)", 
                   "9M Return (%)", "12M Return (%)", "Sharpe", "Signal"] + qtr_cols + ["Last updated", "TradingView Link"]
@@ -168,59 +155,41 @@ def run_market_scan():
     print(f"Morning Master Complete. {len(top_20)} stocks saved to live_cmp.csv")
 
     # --- AUTO-UPLOAD TO GITHUB ---
-    print("Uploading fresh data directly to GitHub...")
+    print("Uploading Top 20 strictly to GitHub...")
     os.system('git add live_cmp.csv')
-    os.system('git commit -m "Auto-update MintingM scores"')
+    os.system('git commit -m "Morning Auto-update: Top 20 MintingM Scores"')
     os.system('git push')
-    print("Upload complete! GitHub now has the live data.")
+    print("Upload complete! GitHub is ready for the day.")
 
 
 # =====================================================================
-# --- THE MASTER EXECUTION LOOP (MON-FRI, 9:30 AM TO 3:30 PM) ---
+# --- THE DAILY EXECUTION LOOP (MON-FRI at exactly 9:00 AM) ---
 # =====================================================================
 if __name__ == "__main__":
     while True:
         now = datetime.now()
         
-        # In Python, Monday is 0, Friday is 4. Weekend is 5 and 6.
-        is_weekday = now.weekday() < 5 
-        # Check if time is between 9:30 AM and 3:30 PM inclusive
-        is_market_hours = (now.hour > 9 or (now.hour == 9 and now.minute >= 30)) and (now.hour < 15 or (now.hour == 15 and now.minute <= 30))
+        # We want the script to run exactly at 9:00 AM today
+        target_time = now.replace(hour=9, minute=0, second=0, microsecond=0)
         
-        if is_weekday and is_market_hours:
-            print(f"\n[{now.strftime('%Y-%m-%d %H:%M:%S')}] Market is OPEN. Running scan...")
-            try:
-                run_market_scan()
-            except Exception as e:
-                print(f"An unexpected error occurred: {e}")
+        # If it is already past 9:00 AM today, set the alarm for tomorrow
+        if now >= target_time:
+            target_time += timedelta(days=1)
             
-            # Synchronize to the exact top (:00) or bottom (:30) of the hour
-            now_after = datetime.now()
+        # If the target day lands on Saturday (5) or Sunday (6), push to Monday
+        while target_time.weekday() >= 5:
+            target_time += timedelta(days=1)
             
-            if now_after.minute < 30:
-                next_run = now_after.replace(minute=30, second=0, microsecond=0)
-            else:
-                next_run = (now_after + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
-            
-            wait_secs = (next_run - now_after).total_seconds()
-            print(f"Scan finished! Synchronizing clock. Next run exactly at {next_run.strftime('%H:%M:%S')}...")
-            time.sleep(wait_secs)
-            
-        else:
-            # Market is CLOSED. Figure out exactly when it opens next.
-            print(f"\n[{now.strftime('%Y-%m-%d %H:%M:%S')}] Market is CLOSED.")
-            
-            # Assume next open is today at 9:30 AM
-            next_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
-            
-            # If it's already past 3:30 PM today, push the target to tomorrow
-            if now.hour > 15 or (now.hour == 15 and now.minute > 30):
-                next_open += timedelta(days=1)
-            
-            # If the target day falls on Saturday (5) or Sunday (6), push it to Monday
-            while next_open.weekday() >= 5:
-                next_open += timedelta(days=1)
-                
-            wait_secs = (next_open - now).total_seconds()
-            print(f"Sleeping until market opens on {next_open.strftime('%A, %Y-%m-%d at %H:%M:%S')}...")
-            time.sleep(wait_secs)
+        wait_secs = (target_time - now).total_seconds()
+        
+        print(f"\n[{now.strftime('%Y-%m-%d %H:%M:%S')}] Morning Master is sleeping.")
+        print(f"Alarm set for exactly: {target_time.strftime('%A, %Y-%m-%d at %H:%M:%S')}...")
+        
+        # Sleep until 9:00 AM
+        time.sleep(wait_secs)
+        
+        # The alarm rings! Run the scan.
+        try:
+            run_market_scan()
+        except Exception as e:
+            print(f"An unexpected error occurred during morning scan: {e}")
