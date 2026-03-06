@@ -163,12 +163,18 @@ except Exception:
     for col in qtr_cols: 
         top_20[col] = 0
 
+# ... (rest of your script above) ...
+
 top_20['Last updated'] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-# UPDATED TO INCLUDE SUPERTREND IN THE FINAL OUTPUT
+# --- ADD TRADINGVIEW LINK HERE ---
+# We don't need to strip '.NS' here because you already did it on line 87: ticker.replace('.NS', '')
+top_20['TradingView Link'] = "https://in.tradingview.com/chart/?symbol=NSE:" + top_20['Stock Name'].astype(str)
+
+# UPDATED TO INCLUDE SUPERTREND & TRADINGVIEW LINK IN THE FINAL OUTPUT
 final_cols = ["Stock Name", "CMP", "MintingM Score", "RS (1-100)", "SMA 200", "SuperTrend", "1 Day Return (%)", 
               "1 Week Return (%)", "1M Return (%)", "3M Return (%)", "6M Return (%)", 
-              "9M Return (%)", "12M Return (%)", "Sharpe", "Signal"] + qtr_cols + ["Last updated"]
+              "9M Return (%)", "12M Return (%)", "Sharpe", "Signal"] + qtr_cols + ["Last updated", "TradingView Link"]
 
 top_20[final_cols].to_csv("live_cmp.csv", index=False)
 print(f"Morning Master Complete. {len(top_20)} stocks saved to live_cmp.csv")
