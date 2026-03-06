@@ -3,9 +3,9 @@ import pandas as pd
 import pandas_ta as ta
 import numpy as np
 from datetime import datetime, timedelta
+import time
 import math
 import os
-import time  # NEW: Imported for the 30-minute timer
 
 def run_market_scan():
     print(f"\n--- Starting Morning Master (750 Universe Scan) at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---")
@@ -16,7 +16,7 @@ def run_market_scan():
         tickers = [str(symbol).strip() + ".NS" for symbol in df_tickers['Symbol'].tolist()]
     except FileNotFoundError:
         print("Error: ind_nifty750list.csv not found!")
-        return # Changed exit(1) to return so the loop doesn't completely die on a missing file
+        return # Prevents the whole loop from crashing if the file is missing
 
     # Download 1.5 years of data (for 252 days + 200 SMA buffer)
     start_date = datetime.today() - timedelta(days=400)
@@ -29,7 +29,7 @@ def run_market_scan():
         try:
             # Basic data cleaning
             df = data[ticker].dropna(subset=['High', 'Low', 'Close']).copy()
-            if len(df) < 252: # Increased to 252 for stable Sharpe
+            if len(df) < 252:
                 continue
                 
             # --- TA Indicators ---
@@ -67,18 +67,10 @@ def run_market_scan():
             
             # --- WEIGHTED MOMENTUM SHARPE (NOT ANNUALIZED) ---
             df['Daily_Ret'] = df['Close'].pct_change()
-
-            # 1. Use EWMA for the mean return (last 63 days bias)
-            # span=63 gives more weight to the most recent 3 months
             weighted_mean = df['Daily_Ret'].tail(63).ewm(span=63).mean().iloc[-1]
-
-            # 2. Use a stable 252-day Standard Deviation for Risk
             stable_std = df['Daily_Ret'].tail(252).std()
 
-            # 3. Calculate Weighted Sharpe
             if stable_std > 0.005:
-                # We remove math.sqrt(252) to keep the value low (non-annualized)
-                # We multiply by 10 to scale the decimal into the 1.0 - 2.2 range
                 sharpe = ((weighted_mean - daily_rf_rate) / stable_std) * 10
             else:
                 sharpe = 0
@@ -89,8 +81,6 @@ def run_market_scan():
             
             # --- NEW SIGNAL LOGIC ---
             is_circuit_day = (high_now == low_now)
-            
-            # Safely handle potential NaN values to prevent false triggers
             price_above_sma200 = (current_price > sma_200) if not pd.isna(sma_200) else False
             price_above_supertrend = (current_price > supertrend_val) if not pd.isna(supertrend_val) else True
 
@@ -149,7 +139,6 @@ def run_market_scan():
         df_final['RS (1-100)'] = (df_final['RS_Raw'].rank(pct=True) * 100).round(2)
         df_final['SMA_Rank'] = (df_final['SMA_Dist'].rank(pct=True) * 100).round(2)
         df_final['MintingM Score'] = ((df_final['RS (1-100)'] + df_final['SMA_Rank']) / 2).round(2)
-        
         top_20 = df_final.sort_values(by="MintingM Score", ascending=False).head(20).copy()
     else:
         print("Ranking failed: Missing data columns.")
@@ -178,7 +167,7 @@ def run_market_scan():
     top_20[final_cols].to_csv("live_cmp.csv", index=False)
     print(f"Morning Master Complete. {len(top_20)} stocks saved to live_cmp.csv")
 
-    # --- NEW: AUTO-UPLOAD TO GITHUB ---
+    # --- AUTO-UPLOAD TO GITHUB ---
     print("Uploading fresh data directly to GitHub...")
     os.system('git add live_cmp.csv')
     os.system('git commit -m "Auto-update MintingM scores"')
@@ -186,13 +175,52 @@ def run_market_scan():
     print("Upload complete! GitHub now has the live data.")
 
 
-# --- NEW: THE 30-MINUTE LOOP ---
+# =====================================================================
+# --- THE MASTER EXECUTION LOOP (MON-FRI, 9:30 AM TO 3:30 PM) ---
+# =====================================================================
 if __name__ == "__main__":
     while True:
-        try:
-            run_market_scan()
-        except Exception as e:
-            print(f"An unexpected error occurred: {e}")
+        now = datetime.now()
         
-        print(f"\nScan finished. Waiting 30 minutes for the next update...")
-        time.sleep(1800)  # 1800 seconds = exactly 30 minutes
+        # In Python, Monday is 0, Friday is 4. Weekend is 5 and 6.
+        is_weekday = now.weekday() < 5 
+        # Check if time is between 9:30 AM and 3:30 PM inclusive
+        is_market_hours = (now.hour > 9 or (now.hour == 9 and now.minute >= 30)) and (now.hour < 15 or (now.hour == 15 and now.minute <= 30))
+        
+        if is_weekday and is_market_hours:
+            print(f"\n[{now.strftime('%Y-%m-%d %H:%M:%S')}] Market is OPEN. Running scan...")
+            try:
+                run_market_scan()
+            except Exception as e:
+                print(f"An unexpected error occurred: {e}")
+            
+            # Synchronize to the exact top (:00) or bottom (:30) of the hour
+            now_after = datetime.now()
+            
+            if now_after.minute < 30:
+                next_run = now_after.replace(minute=30, second=0, microsecond=0)
+            else:
+                next_run = (now_after + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+            
+            wait_secs = (next_run - now_after).total_seconds()
+            print(f"Scan finished! Synchronizing clock. Next run exactly at {next_run.strftime('%H:%M:%S')}...")
+            time.sleep(wait_secs)
+            
+        else:
+            # Market is CLOSED. Figure out exactly when it opens next.
+            print(f"\n[{now.strftime('%Y-%m-%d %H:%M:%S')}] Market is CLOSED.")
+            
+            # Assume next open is today at 9:30 AM
+            next_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
+            
+            # If it's already past 3:30 PM today, push the target to tomorrow
+            if now.hour > 15 or (now.hour == 15 and now.minute > 30):
+                next_open += timedelta(days=1)
+            
+            # If the target day falls on Saturday (5) or Sunday (6), push it to Monday
+            while next_open.weekday() >= 5:
+                next_open += timedelta(days=1)
+                
+            wait_secs = (next_open - now).total_seconds()
+            print(f"Sleeping until market opens on {next_open.strftime('%A, %Y-%m-%d at %H:%M:%S')}...")
+            time.sleep(wait_secs)
