@@ -2,18 +2,20 @@ name: Live CMP Updater
 
 on:
   schedule:
-    # Runs at :20 and :50 past the hour, from 04:00 to 09:59 UTC (9:50 AM to 3:20 PM IST) Monday-Friday
+    # 04:20 UTC to 09:50 UTC (9:50 AM IST to 3:20 PM IST)
+    # Runs at :20 and :50 every hour
     - cron: '20,50 4-9 * * 1-5'
-    # Runs exactly at 10:00 UTC (3:30 PM IST) for the final closing bell Monday-Friday
+    
+    # 10:00 UTC (3:30 PM IST) 
+    # The final closing bell run
     - cron: '0 10 * * 1-5'
   
-  workflow_dispatch: # This keeps the manual "Run workflow" button in GitHub so you can test it
+  workflow_dispatch: # Allows you to click "Run Workflow" manually for testing
 
 jobs:
   update-data:
     runs-on: ubuntu-latest
     
-    # CRITICAL: This gives the GitHub bot permission to actually save the file!
     permissions:
       contents: write 
 
@@ -37,5 +39,5 @@ jobs:
       - name: Commit and Push changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Auto-update Live CMPs"
+          commit_message: "Auto-update Live CMPs (IST schedule)"
           file_pattern: 'live_cmp.csv'
