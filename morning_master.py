@@ -163,16 +163,16 @@ def run_market_scan():
 
 
 # =====================================================================
-# --- THE DAILY EXECUTION LOOP (MON-FRI at exactly 9:00 AM) ---
+# --- THE DAILY EXECUTION LOOP (MON-FRI at exactly 9:30 AM) ---
 # =====================================================================
 if __name__ == "__main__":
     while True:
         now = datetime.now()
         
-        # We want the script to run exactly at 9:00 AM today
-        target_time = now.replace(hour=9, minute=0, second=0, microsecond=0)
+        # We want the script to run exactly at 9:30 AM today
+        target_time = now.replace(hour=9, minute=30, second=0, microsecond=0)
         
-        # If it is already past 9:00 AM today, set the alarm for tomorrow
+        # If it is already past 9:30 AM today, set the alarm for tomorrow
         if now >= target_time:
             target_time += timedelta(days=1)
             
@@ -185,7 +185,7 @@ if __name__ == "__main__":
         print(f"\n[{now.strftime('%Y-%m-%d %H:%M:%S')}] Morning Master is sleeping.")
         print(f"Alarm set for exactly: {target_time.strftime('%A, %Y-%m-%d at %H:%M:%S')}...")
         
-        # Sleep until 9:00 AM
+        # Sleep until 9:30 AM
         time.sleep(wait_secs)
         
         # The alarm rings! Run the scan.
