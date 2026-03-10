@@ -34,7 +34,7 @@ jobs:
           pip install pandas yfinance
 
       - name: Run Live Pinger
-        run: python live.py
+        run: python live_pinger.py
 
       - name: Commit and Push changes
         uses: stefanzweifel/git-auto-commit-action@v5
