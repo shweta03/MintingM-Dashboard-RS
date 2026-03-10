@@ -3,12 +3,12 @@ import pandas as pd
 import pandas_ta as ta
 import numpy as np
 from datetime import datetime, timedelta
-import time
 import math
-import os
 
 def run_market_scan():
-    print(f"\n--- Starting Morning Master (750 Universe Scan) at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---")
+    # Calculate Indian Standard Time (UTC + 5:30)
+    ist_now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    print(f"\n--- Starting Morning Master at {ist_now.strftime('%Y-%m-%d %H:%M:%S')} IST ---")
 
     # 1. Load Universe
     try:
@@ -18,8 +18,8 @@ def run_market_scan():
         print("Error: ind_nifty750list.csv not found!")
         return
 
-    # Download 1.5 years of data
-    start_date = datetime.today() - timedelta(days=400)
+    # 2. Download exactly 1 year of data (365 calendar days)
+    start_date = datetime.utcnow() - timedelta(days=365)
     data = yf.download(tickers, start=start_date.strftime('%Y-%m-%d'), group_by='ticker', threads=True)
 
     daily_rf_rate = 0.05 / 252
@@ -28,7 +28,9 @@ def run_market_scan():
     for ticker in tickers:
         try:
             df = data[ticker].dropna(subset=['High', 'Low', 'Close']).copy()
-            if len(df) < 252:
+            
+            # Since 1 calendar year = ~250 trading days, we need at least 200 days to calculate a 200 SMA
+            if len(df) < 200:
                 continue
                 
             # --- TA Indicators ---
@@ -54,9 +56,11 @@ def run_market_scan():
             rsi_14 = float(df['RSI_14'].iloc[-1])
 
             # --- Performance Returns ---
+            # Safe return calculation based on available rows
             def get_ret(days): 
+                safe_days = min(len(df) - 1, days)
                 try:
-                    return ((current_price / float(df['Close'].iloc[-min(len(df), days)])) - 1) * 100
+                    return ((current_price / float(df['Close'].iloc[-safe_days])) - 1) * 100
                 except:
                     return 0
 
@@ -66,7 +70,7 @@ def run_market_scan():
             # --- WEIGHTED MOMENTUM SHARPE ---
             df['Daily_Ret'] = df['Close'].pct_change()
             weighted_mean = df['Daily_Ret'].tail(63).ewm(span=63).mean().iloc[-1]
-            stable_std = df['Daily_Ret'].tail(252).std()
+            stable_std = df['Daily_Ret'].std() # Uses available 1-year data
 
             if stable_std > 0.005:
                 sharpe = ((weighted_mean - daily_rf_rate) / stable_std) * 10
@@ -118,7 +122,7 @@ def run_market_scan():
         except Exception:
             continue
 
-    # 2. Process Results and Ranking
+    # 3. Process Results and Ranking
     if not results:
         print("No data collected. Check internet or ticker list.")
         return
@@ -134,7 +138,6 @@ def run_market_scan():
         print("Ranking failed: Missing data columns.")
         return
 
-    # 3. Merge Quarterly Data
     qtr_cols = ['Qtr Profit Var %', 'QoQ profits %', 'QoQ sales %', 'OPM']
     try:
         yesterday_df = pd.read_csv("live_cmp.csv")
@@ -144,7 +147,8 @@ def run_market_scan():
         for col in qtr_cols: 
             top_20[col] = 0
 
-    top_20['Last updated'] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    # --- INDIAN TIME ASSIGNMENT ---
+    top_20['Last updated'] = ist_now.strftime("%Y-%m-%d %H:%M")
     top_20['TradingView Link'] = "https://in.tradingview.com/chart/?symbol=NSE:" + top_20['Stock Name'].astype(str)
 
     final_cols = ["Stock Name", "CMP", "MintingM Score", "RS (1-100)", "SMA 200", "SuperTrend", "1 Day Return (%)", 
@@ -154,42 +158,6 @@ def run_market_scan():
     top_20[final_cols].to_csv("live_cmp.csv", index=False)
     print(f"Morning Master Complete. {len(top_20)} stocks saved to live_cmp.csv")
 
-    # --- AUTO-UPLOAD TO GITHUB ---
-    print("Uploading Top 20 strictly to GitHub...")
-    os.system('git add live_cmp.csv')
-    os.system('git commit -m "Morning Auto-update: Top 20 MintingM Scores"')
-    os.system('git push')
-    print("Upload complete! GitHub is ready for the day.")
-
-
-# =====================================================================
-# --- THE DAILY EXECUTION LOOP (MON-FRI at exactly 9:30 AM) ---
-# =====================================================================
+# Only run once, immediately, and then let the file close so GitHub Actions can finish
 if __name__ == "__main__":
-    while True:
-        now = datetime.now()
-        
-        # We want the script to run exactly at 9:30 AM today
-        target_time = now.replace(hour=9, minute=30, second=0, microsecond=0)
-        
-        # If it is already past 9:30 AM today, set the alarm for tomorrow
-        if now >= target_time:
-            target_time += timedelta(days=1)
-            
-        # If the target day lands on Saturday (5) or Sunday (6), push to Monday
-        while target_time.weekday() >= 5:
-            target_time += timedelta(days=1)
-            
-        wait_secs = (target_time - now).total_seconds()
-        
-        print(f"\n[{now.strftime('%Y-%m-%d %H:%M:%S')}] Morning Master is sleeping.")
-        print(f"Alarm set for exactly: {target_time.strftime('%A, %Y-%m-%d at %H:%M:%S')}...")
-        
-        # Sleep until 9:30 AM
-        time.sleep(wait_secs)
-        
-        # The alarm rings! Run the scan.
-        try:
-            run_market_scan()
-        except Exception as e:
-            print(f"An unexpected error occurred during morning scan: {e}")
+    run_market_scan()
