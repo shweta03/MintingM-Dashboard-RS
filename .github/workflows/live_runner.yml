@@ -2,16 +2,10 @@ name: Live CMP Updater
 
 on:
   schedule:
-    # 04:40 UTC = 10:10 AM IST (First update)
     - cron: '40 4 * * 1-5'
-    
-    # UTC 05:10 to 09:40 = 10:40 AM to 3:10 PM IST (Every 30 mins)
     - cron: '10,40 5-9 * * 1-5'
-    
-    # 10:00 UTC = 03:30 PM IST (Final market close update)
     - cron: '0 10 * * 1-5'
-
-  workflow_dispatch: # Gives you the manual 'Run workflow' button
+  workflow_dispatch:
 
 jobs:
   update-data:
@@ -42,9 +36,7 @@ jobs:
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          
-          # Add first, then pull to avoid conflicts, then commit and push
           git add live_cmp.csv
-          git pull origin main --rebase
           git commit -m "Live Price Update" || echo "No changes to commit"
+          git pull origin main --rebase
           git push
