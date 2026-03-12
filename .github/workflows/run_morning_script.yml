@@ -2,32 +2,30 @@ name: Morning Master Selection
 
 on:
   schedule:
-    # 0 4 UTC = exactly 9:30 AM IST, Monday through Friday
-    - cron: '0 4 * * 1-5' 
+    # 04:00 UTC = 09:30 AM IST (Mon-Fri)
+    - cron: '0 4 * * 1-5'
   
-  workflow_dispatch: # Allows manual run
+  workflow_dispatch: # Allows you to run it manually via the Actions tab
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Crucial for saving the CSV
-    
+      contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4 # Upgraded to v4
+        uses: actions/checkout@v4
         with:
           persist-credentials: true
 
       - name: Set up Python
-        uses: actions/setup-python@v5 # Upgraded to v5
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install pandas yfinance pandas_ta numpy
 
       - name: Run Morning Master
         run: python morning_master.py
@@ -36,7 +34,7 @@ jobs:
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git pull origin main --rebase
           git add live_cmp.csv
-          git commit -m "Morning Top 20 Selection" || echo "No changes to commit"
-          # This push command now works because of the checkout@v4 credentials
+          git commit -m "Morning Market Open Scan" || echo "No changes"
           git push
