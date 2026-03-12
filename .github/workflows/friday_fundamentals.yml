@@ -1,7 +1,7 @@
 name: Friday Fundamentals Update
 on:
   schedule:
-    - cron: '50 3 * * 5' # Runs at 03:50 UTC -> 9:20 AM IST (FRIDAYS ONLY)
+    - cron: '40 3 * * 5' # Runs at 03:50 UTC -> 9:20 AM IST (FRIDAYS ONLY)
   workflow_dispatch:
 jobs:
   build:
